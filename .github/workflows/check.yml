@@ -1,0 +1,15 @@
+name: Telegram check
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check bot and chat
+        env:
+          T: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          C: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "token length: ${#T}  chat length: ${#C}"
+          echo "--- getMe"; curl -s "https://api.telegram.org/bot$T/getMe" | sed 's/"id":[0-9]*/"id":X/'; echo
+          echo "--- getChat"; curl -s "https://api.telegram.org/bot$T/getChat?chat_id=$C" | head -c 300; echo
+          echo "--- sendMessage"; curl -s "https://api.telegram.org/bot$T/sendMessage" -d chat_id="$C" -d text="LBS bot test OK" | head -c 300; echo
