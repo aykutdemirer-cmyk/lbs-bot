@@ -1,0 +1,21 @@
+name: Find chat id
+on: workflow_dispatch
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List chats that messaged the bot
+        env:
+          T: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          curl -s "https://api.telegram.org/bot$T/getUpdates" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          seen=set()
+          for u in d.get('result',[]):
+              m=u.get('message') or u.get('my_chat_member') or {}
+              c=m.get('chat',{})
+              k=(c.get('id'),c.get('first_name'),c.get('type'))
+              if k not in seen: seen.add(k); print('CHAT', *k)
+          print('updates:',len(d.get('result',[])))
+          "
