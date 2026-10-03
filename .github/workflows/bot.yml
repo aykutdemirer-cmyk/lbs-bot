@@ -1,0 +1,41 @@
+name: Telegram bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"    # 5 dakikada bir Telegram mesajlarını kontrol eder
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-bot
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check for new messages
+        id: check
+        env:
+          T: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          n=$(curl -s "https://api.telegram.org/bot$T/getUpdates?timeout=0" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('result', [])))")
+          echo "yeni mesaj: $n"
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.count != '0'
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.count != '0'
+        with:
+          python-version: "3.12"
+      - name: Install
+        if: steps.check.outputs.count != '0'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg libcairo2
+          pip install -r requirements.txt
+      - name: Handle requests
+        if: steps.check.outputs.count != '0'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py

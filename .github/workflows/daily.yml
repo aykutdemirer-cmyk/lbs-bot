@@ -8,6 +8,9 @@ on:
       count:
         description: "Kaç video üretilsin?"
         default: "1"
+      matches:
+        description: "Maçlar (ör. hr:gb-eng,es:cz) — boş bırakılırsa normal video"
+        default: ""
 
 jobs:
   render:
@@ -26,10 +29,15 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MATCHES: ${{ github.event.inputs.matches }}
         run: |
-          for i in $(seq 1 "${{ github.event.inputs.count || 1 }}"); do
-            python lbs.py --send --index $((i-1))
-          done
+          if [ -n "$MATCHES" ]; then
+            for m in ${MATCHES//,/ }; do python lbs.py --send --match "$m"; done
+          else
+            for i in $(seq 1 "${{ github.event.inputs.count || 1 }}"); do
+              python lbs.py --send --index $((i-1))
+            done
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: videos
