@@ -21,6 +21,10 @@ NAMES = {'tr':'Turkey','us':'USA','de':'Germany','jp':'Japan','br':'Brazil','fr'
  'eg':'Egypt','id':'Indonesia','au':'Australia','za':'South Africa','ng':'Nigeria','ua':'Ukraine','ch':'Switzerland',
  'be':'Belgium','at':'Austria','no':'Norway','dk':'Denmark','fi':'Finland','ie':'Ireland','ma':'Morocco',
  'pk':'Pakistan','co':'Colombia','cl':'Chile'}
+EXTRA_NAMES = {'hr': 'Croatia', 'gb-eng': 'England', 'gb-sct': 'Scotland', 'gb-wls': 'Wales', 'cz': 'Czechia',
+               'mk': 'North Macedonia', 'si': 'Slovenia', 'al': 'Albania', 'by': 'Belarus', 'sm': 'San Marino',
+               'ee': 'Estonia', 'lu': 'Luxembourg', 'is': 'Iceland', 'bg': 'Bulgaria', 'rs': 'Serbia', 'ro': 'Romania',
+               'hu': 'Hungary', 'sk': 'Slovakia', 'ge': 'Georgia', 'il': 'Israel', 'cy': 'Cyprus', 'uy': 'Uruguay'}
 THEMES = {  # başlık ve kadro varyasyonları
  'world':  ('World', list(NAMES)),
  'europe': ('Europe', ['de','fr','gb','it','es','nl','pl','pt','se','gr','ua','ch','be','at','no','dk','fi','ie','tr']),
@@ -129,15 +133,20 @@ def simulate(seed, codes, mode='classic', max_t=70):
         if f / FPS > max_t: return None
     return dict(frames=frames, events=events, order=order, fin=fin, winner=winner, gaps=gaps)
 
-def pick_episode(seed, mode=None):
+def pick_episode(seed, mode=None, codes=None):
     rng = random.Random(seed)
     theme = rng.choice(list(THEMES)); tname, pool = THEMES[theme]
     mode = mode or rng.choice(MODE_ORDER)
     n = rng.choice([12, 14, 16, 16]) if mode == 'grow' else rng.choice([12, 14, 16, 16, 18])
-    codes = rng.sample(pool, min(n, len(pool)))
+    custom = codes
+    codes = list(custom) if custom else rng.sample(pool, min(n, len(pool)))
+    if custom: tname = 'Your Pick'
     lo, hi = (14 if mode in ('escape', 'hp') else 18), 45
-    if mode == 'mega':
+    if mode == 'mega' and not custom:
         tname = 'All Countries'; codes = rng.sample(list(NAMES), len(NAMES)); lo, hi = 24, 75
+    elif mode == 'mega':
+        lo, hi = 24, 75
+    if custom and len(codes) < 10: lo = 8
     for k in range(300):  # uygun uzunlukta bir sonuç ara
         s = seed * 1000 + k
         r = simulate(s, codes, mode, max_t=95)
@@ -671,7 +680,9 @@ def main():
     if not match and not a.mode and pick == 'match':
         home_, away_ = random.Random(seed).sample(THEMES['football'][1], 2); match = f'{home_}-{away_}'
     if match:
-        home, away = match.lower().split('-')
+        home, away = match.lower().split(':') if ':' in match else match.lower().split('-')
+        for c in (home, away):
+            if c not in NAMES: NAMES[c] = EXTRA_NAMES.get(c, c.upper())
         sim = pick_match(seed, home, away)
         print('maç:', home, away, sim['score'])
         raw, wav, final = out / 'raw.mp4', out / 'audio.wav', out / f'lbs_{seed}.mp4'
