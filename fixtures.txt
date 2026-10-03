@@ -1,0 +1,5 @@
+# Maç günü listesi: TARİH EVSAHIBI DEPLASMAN (ülke kodları: tr, it, be, fr, es, de, gb, br, ar ...)
+# O gün ilk video maç videosu olur. İstediğin maçı ekleyebilirsin.
+2026-10-05 it tr   # İtalya - Türkiye, UEFA Uluslar Ligi
+2026-11-12 tr be   # Türkiye - Belçika
+2026-11-15 fr tr   # Fransa - Türkiye
