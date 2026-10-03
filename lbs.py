@@ -43,6 +43,9 @@ MODES = {
              ['First Country To Escape Wins 🏃 {n} Balls', 'Escape Race: {theme} Edition 🥇']),
  'hp':      ('BATTLE ROYALE!', 'Every hit costs 1 HP', 'LEFT', 'KNOCKED OUT!', 'ELIMINATED',
              ['{n} Countries Battle Royale ⚔️ Only 1 Survives', 'Country Ball Battle Royale: {theme} Edition ⚔️']),
+ 'mega':    ('40 COUNTRIES. 1 WINNER!', 'The biggest battle ever', 'LEFT', 'OUT!', 'ELIMINATED',
+             ['40 Countries Enter, Only 1 Survives 🌍🏆', 'The BIGGEST Country Ball Battle Ever 😱 40 Countries',
+              'All 40 Countries In One Arena 🌍 Who Wins?']),
 }
 MODE_ORDER = ['classic', 'escape', 'hp', 'shrink', 'grow', 'double']
 HP0 = 10
@@ -50,24 +53,25 @@ HP0 = 10
 # ---------------------------------------------------------------- simülasyon
 def simulate(seed, codes, mode='classic', max_t=70):
     rng = random.Random(seed); n = len(codes)
-    rad = np.full(n, float(BR)); hp = np.full(n, HP0); cool = np.zeros((n, n))
+    br, R0 = (28, 470) if mode == 'mega' else (BR, R)   # dev arena: daha küçük toplar, daha büyük halka
+    rad = np.full(n, float(br)); hp = np.full(n, HP0); cool = np.zeros((n, n))
     pos = []
     while len(pos) < n:
-        a = rng.uniform(0, 2 * math.pi); r = rng.uniform(0, R - BR - 10)
+        a = rng.uniform(0, 2 * math.pi); r = rng.uniform(0, R0 - br - 10)
         p = np.array([CX + r * math.cos(a), CY + r * math.sin(a)])
-        if all(np.linalg.norm(p - q) > 2 * BR + 4 for q in pos): pos.append(p)
+        if all(np.linalg.norm(p - q) > 2 * br + 4 for q in pos): pos.append(p)
     pos = np.array(pos); vel = np.array([[rng.uniform(-500, 500), rng.uniform(-500, 200)] for _ in range(n)])
     alive = np.ones(n, bool); out = np.zeros(n, bool)
     gap_ang = rng.uniform(0, 2 * math.pi)
-    gap_w0 = math.radians({'escape': 6, 'double': 18}.get(mode, rng.uniform(22, 30)))
+    gap_w0 = math.radians({'escape': 6, 'double': 18, 'mega': 24}.get(mode, rng.uniform(22, 30)))
     gaps = [] if mode == 'hp' else ([0, math.pi] if mode == 'double' else [0])
     omega = math.radians(rng.uniform(55, 90)) * rng.choice([-1, 1])
     frames, events, order = [], [], []
     dt = 1 / FPS / SUB; f = 0; last_ev = 0; fin = None; winner = None
     while True:
         ta = max(0, (f - INTRO) / FPS)
-        Rn = R - 190 * min(1, ta / 22) if mode == 'shrink' else R
-        gap_w = gap_w0 + math.radians(4) * max(0, (f - last_ev) / FPS - (7 if mode == 'escape' else 4))
+        Rn = R - 190 * min(1, ta / 22) if mode == 'shrink' else R0
+        gap_w = gap_w0 + math.radians(4) * max(0, (f - last_ev) / FPS - {'escape': 7, 'mega': 2}.get(mode, 4))
         bounces, hits = [], []
         if f >= INTRO and fin is None:
             for _ in range(SUB):
@@ -91,7 +95,7 @@ def simulate(seed, codes, mode='classic', max_t=70):
                         if in_gap and dist < Rn + ri:
                             if dist > Rn + ri * .2: out[i] = True
                             continue
-                        if dist >= Rn + ri * .2: continue
+                        if dist >= Rn + ri * .2: out[i] = True; continue   # duvarı aşan top da elenir
                         nr = d / dist; pos[i] = (CX, CY) + nr * (Rn - ri); vn = np.dot(vel[i], nr)
                         if vn > 0:
                             vel[i] -= 2 * vn * nr; sp = math.hypot(*vel[i])
@@ -107,8 +111,13 @@ def simulate(seed, codes, mode='classic', max_t=70):
                     if mode == 'hp': vel[i] = (rng.uniform(-200, 200), -600)
             if mode == 'escape':
                 if len(order) >= 3: fin = f; winner = order[0]
-            elif alive.sum() == 1:
-                fin = f; winner = int(np.where(alive)[0][0])
+            elif alive.sum() <= 1:
+                if alive.sum() == 0:   # son ikisi aynı anda çıkarsa: en son çıkan kazanır
+                    winner = order.pop(); alive[winner] = True; out[winner] = False
+                    events = [e for e in events if not (e[1] == 'elim' and e[2] == winner)]
+                else:
+                    winner = int(np.where(alive)[0][0])
+                fin = f
             if fin is not None: events.append((f, 'win', winner))
         elif fin is not None:
             pos[winner] += ((CX, CY) - pos[winner]) * 0.08; vel[winner] = 0
@@ -126,10 +135,13 @@ def pick_episode(seed, mode=None):
     mode = mode or rng.choice(MODE_ORDER)
     n = rng.choice([12, 14, 16, 16]) if mode == 'grow' else rng.choice([12, 14, 16, 16, 18])
     codes = rng.sample(pool, min(n, len(pool)))
-    for k in range(300):  # 18–45 sn arası bir sonuç ara
+    lo, hi = (14 if mode in ('escape', 'hp') else 18), 45
+    if mode == 'mega':
+        tname = 'All Countries'; codes = rng.sample(list(NAMES), len(NAMES)); lo, hi = 24, 75
+    for k in range(300):  # uygun uzunlukta bir sonuç ara
         s = seed * 1000 + k
-        r = simulate(s, codes, mode)
-        if r and (14 if mode in ('escape', 'hp') else 18) * FPS <= r['fin'] <= 45 * FPS:
+        r = simulate(s, codes, mode, max_t=95)
+        if r and lo * FPS <= r['fin'] <= hi * FPS:
             return dict(seed=seed, sim_seed=s, theme=tname, mode=mode, codes=codes, hue=rng.random()), r
     raise RuntimeError('uygun simülasyon bulunamadı')
 
@@ -268,7 +280,7 @@ def render(ep, sim, out_path):
                 text_c(dr, (x, y + rad[i] + 26), NAMES[C[i]], fSmall, (255, 255, 255), 4)
         ty = 1590
         dr.text((W / 2, ty - 18), tray_lbl, font=fSmall, fill=(255, 255, 255, 150), anchor='mm')
-        cols = 8 if N <= 16 else 9; step = (W - 120) / cols
+        cols = 8 if N <= 16 else (9 if N <= 18 else 13); step = (W - 120) / cols
         shown = [i for i in order if elim_at[i] <= f]
         if mode == 'escape':
             for k, i in enumerate(shown[:3]):
@@ -277,11 +289,13 @@ def render(ep, sim, out_path):
                 sm = circ_flag(C[i], 76); im.paste(sm, (int(gx - 38), int(gy - 38)), sm)
                 text_c(dr, (gx, gy + 70), f'#{k + 1} {NAMES[C[i]]}', fSmall, MEDAL[k], 3)
         else:
+            big_n = N > 18; rh = 96 if big_n else 108
             for k, i in enumerate(shown):
-                gx = 60 + step / 2 + (k % cols) * step; gy = ty + 40 + (k // cols) * 108
-                sm = small[C[i]]; gimg = Image.blend(Image.new('RGBA', sm.size, (12, 10, 30, 255)), sm, .55); gimg.putalpha(sm.getchannel('A'))
-                im.paste(gimg, (int(gx - 28), int(gy - 20)), gimg)
-                text_c(dr, (gx, gy + 56), f'{place[i]}.', fSmall, (255, 120, 120), 3)
+                gx = 60 + step / 2 + (k % cols) * step; gy = ty + 40 + (k // cols) * rh
+                sm = small[C[i]].resize((42, 42)) if big_n else small[C[i]]
+                gimg = Image.blend(Image.new('RGBA', sm.size, (12, 10, 30, 255)), sm, .55); gimg.putalpha(sm.getchannel('A'))
+                im.paste(gimg, (int(gx - sm.width / 2), int(gy - 20)), gimg)
+                text_c(dr, (gx, gy + sm.height + 6), f'{place[i]}.', fSmall, (255, 120, 120), 3)
         for i in order:
             t0 = elim_at[i]
             if 0 <= f - t0 < 32 and not (mode == 'escape' and place[i] > 3):
@@ -605,7 +619,8 @@ def metadata(ep, place, winner):
              'shrink': 'The arena keeps shrinking. Escape = eliminated. Last one inside wins.',
              'grow': 'Every bounce makes a ball bigger. Escape = eliminated. Last one inside wins.',
              'escape': 'Reverse rules! The FIRST three balls to escape win gold, silver and bronze.',
-             'hp': 'Battle royale: every hit costs 1 HP. Last ball standing wins.'}[ep['mode']]
+             'hp': 'Battle royale: every hit costs 1 HP. Last ball standing wins.',
+             'mega': 'ALL 40 countries in one giant arena. Escape = eliminated. Last one inside wins.'}[ep['mode']]
     desc = (f"{n} country balls. One spinning arena. {MODES[ep['mode']][0].title()} 🏆\n\n"
             f"Last Ball Standing — {ep['theme']} edition. {rules}\n"
             f"Did your country make the final? Comment below and it might join the next battle! 🌍\n"
@@ -651,7 +666,7 @@ def main():
             p_ = line.split('#')[0].split()
             if len(p_) == 3 and p_[0] == today: match = f'{p_[1]}-{p_[2]}'
     real = bool(match)
-    rot = MODE_ORDER[:3] + ['match'] + MODE_ORDER[3:] + ['match']   # maçlar diğer modlarla karışık döner
+    rot = MODE_ORDER[:3] + ['match'] + MODE_ORDER[3:] + ['match', 'mega']   # maçlar ve dev arena diğer modlarla karışık döner
     pick = rot[(datetime.date.today().toordinal() + a.index) % len(rot)]
     if not match and not a.mode and pick == 'match':
         home_, away_ = random.Random(seed).sample(THEMES['football'][1], 2); match = f'{home_}-{away_}'
