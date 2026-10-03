@@ -358,7 +358,8 @@ def make_audio(cues, path, seed):
 
 # ---------------------------------------------------------------- maç modu (ülke topları futbol oynar)
 FL, FR_, FT, FB = 100, W - 100, 560, 1380     # saha sınırları (sol, sağ, tavan, zemin)
-GOAL_H, GOAL_D = 230, 70                     # kale yüksekliği ve derinliği
+GOAL_H, GOAL_D = 270, 70                     # kale ağzı yüksekliği ve derinliği
+GOAL_Y = (FT + FB) / 2                       # kale ağzının ortası (duvarın ortasında)
 PR, BBR = 66, 30                             # oyuncu ve top yarıçapı
 MATCH_T = 42                                 # maç süresi (sn) -> 90 dakikaya ölçeklenir
 
@@ -369,14 +370,14 @@ def simulate_match(seed, max_goals=7):
         return (np.array([[CX - 260, FB - PR], [CX + 260, FB - PR]], float), np.zeros((2, 2)),
                 np.array([CX, FT + 180.]), np.array([rng.uniform(-60, 60), 0.]))
     P, V, B, BV = kickoff()
-    score = [0, 0]; frames = []; events = []; jcd = [0., 0.]; freeze = 0; f = 0
+    score = [0, 0]; frames = []; events = []; jcd = [0., 0.]; freeze = 0; f = 0; hist = []
     total = INTRO + int(MATCH_T * FPS)
     while f < total + int(4.5 * FPS):
         playing = INTRO <= f < total
         kicks = []
         if playing and freeze <= 0:
             for _ in range(SUB):
-                V[:, 1] += 2200 * dt; BV[1] += 1500 * dt
+                V[:, 1] += 2200 * dt; BV[1] += 1100 * dt
                 for k in range(2):
                     side = 1 if k == 0 else -1               # 0: sola savunur, sağa atar
                     target = B[0] - side * 45
@@ -409,7 +410,7 @@ def simulate_match(seed, max_goals=7):
                         if sp > 1900: BV *= 1900 / sp
                         kicks.append(k)
                 # top - duvar / kale
-                in_mouth = B[1] > FB - GOAL_H + BBR
+                in_mouth = GOAL_Y - GOAL_H / 2 + BBR < B[1] < GOAL_Y + GOAL_H / 2 - BBR
                 if B[1] > FB - BBR: B[1] = FB - BBR; BV[1] = -abs(BV[1]) * .72; BV[0] *= .985
                 if B[1] < FT + BBR: B[1] = FT + BBR; BV[1] = abs(BV[1]) * .8
                 if B[0] < FL + BBR:
@@ -418,15 +419,20 @@ def simulate_match(seed, max_goals=7):
                 if B[0] > FR_ - BBR:
                     if in_mouth and B[0] > FR_ + 10: events.append((f, 'goal', 0)); score[0] += 1; freeze = 70; break
                     elif not in_mouth: B[0] = FR_ - BBR; BV[0] = -abs(BV[0]) * .85
-                # üst direk (kale ağzının üst köşesi)
-                for gx in (FL, FR_):
-                    cp = np.array([gx, FB - GOAL_H]); d = B - cp; dist = math.hypot(*d)
+                # direkler (kale ağzının üst ve alt köşeleri)
+                for cp in [np.array([gx, gy]) for gx in (FL, FR_) for gy in (GOAL_Y - GOAL_H / 2, GOAL_Y + GOAL_H / 2)]:
+                    d = B - cp; dist = math.hypot(*d)
                     if 0 < dist < BBR + 8:
                         nr = d / dist; B[:] = cp + nr * (BBR + 8); rel = np.dot(BV, nr)
                         if rel < 0: BV -= 1.9 * rel * nr; events.append((f, 'post', 0))
+            # sıkışma önleyici: top 1.5 sn yerinden çıkmazsa havaya fırlat
+            hist.append(B.copy()); hist = hist[-30:]
+            if len(hist) == 30 and np.ptp(np.array(hist), axis=0).max() < 70:
+                for k in range(2): V[k] = (math.copysign(900, CX - P[k, 0]), -1100); jcd[k] = .8
+                B[1] = min(B[1], FB - PR * 2 - BBR); BV[:] = ((CX - B[0]) * 2, -rng.uniform(1500, 1800)); hist = []
         elif freeze > 0:
             freeze -= 1
-            if freeze == 0: P, V, B, BV = kickoff()
+            if freeze == 0: P, V, B, BV = kickoff(); hist = []
         frames.append((P.copy(), V.copy(), B.copy(), tuple(score), freeze, kicks))
         f += 1
     return dict(frames=frames, events=events, score=tuple(score), total=total)
@@ -455,11 +461,15 @@ def render_match(home, away, sim, out_path, seed):
     bd.rectangle([FL, FT, FR_, FB], outline=(255, 255, 255), width=6)
     for gx, sgn in ((FL, -1), (FR_, 1)):  # kaleler + ağ
         x0, x1 = (gx - GOAL_D, gx) if sgn < 0 else (gx, gx + GOAL_D)
-        bd.rectangle([x0, FB - GOAL_H, x1, FB], fill=(25, 60, 45))
-        for yy_ in range(int(FB - GOAL_H), int(FB), 18): bd.line([(x0, yy_), (x1, yy_)], fill=(200, 210, 210), width=1)
-        for xx_ in range(int(x0), int(x1), 18): bd.line([(xx_, FB - GOAL_H), (xx_, FB)], fill=(200, 210, 210), width=1)
-        bd.line([(gx, FB - GOAL_H), (gx, FB)], fill=(255, 255, 255), width=10)
-        bd.line([(x0, FB - GOAL_H), (x1, FB - GOAL_H)], fill=(255, 255, 255), width=10)
+        g0, g1 = GOAL_Y - GOAL_H / 2, GOAL_Y + GOAL_H / 2
+        bd.rectangle([x0, g0, x1, g1], fill=(25, 60, 45))
+        for yy_ in range(int(g0), int(g1), 18): bd.line([(x0, yy_), (x1, yy_)], fill=(200, 210, 210), width=1)
+        for xx_ in range(int(x0), int(x1), 18): bd.line([(xx_, g0), (xx_, g1)], fill=(200, 210, 210), width=1)
+        bd.line([(gx, g0), (gx, g1)], fill=(25, 60, 45), width=8)          # saha çizgisini kale ağzında aç
+        bd.line([(x0, g0), (x1, g0)], fill=(255, 255, 255), width=10)
+        bd.line([(x0, g1), (x1, g1)], fill=(255, 255, 255), width=10)
+        bd.line([(x1 if sgn < 0 else x0, g0), (x1 if sgn < 0 else x0, g1)], fill=(255, 255, 255), width=4)
+        for gy in (g0, g1): bd.ellipse([gx - 9, gy - 9, gx + 9, gy + 9], fill=(255, 255, 255))
     fb_ = Image.new('RGBA', (BBR * 2 + 4, BBR * 2 + 4), (0, 0, 0, 0)); fd = ImageDraw.Draw(fb_)
     fd.ellipse([1, 1, BBR * 2 + 2, BBR * 2 + 2], fill='white', outline=(0, 0, 0), width=3)
     for a in range(5):
@@ -531,6 +541,46 @@ def render_match(home, away, sim, out_path, seed):
         p.stdin.write(im.tobytes())
     p.stdin.close(); p.wait()
     return dict(n=len(frames), bounces=kick_log, hits=[], elims=sorted(goals), win=total)
+
+def make_match_audio(cues, path, seed):
+    SR = 44100; rng = np.random.default_rng(seed); n = int(SR * (cues['n'] / FPS + .1))
+    out = np.zeros(n)
+    def add(t, sig, g=1.0):
+        a = int(t * SR); L = min(len(sig), n - a)
+        if L > 0 and a >= 0: out[a:a + L] += g * sig[:L]
+    def band(x, lo, hi):
+        X = np.fft.rfft(x); fr = np.fft.rfftfreq(len(x), 1 / SR); X[(fr < lo) | (fr > hi)] = 0
+        y = np.fft.irfft(X, len(x)); return y / (np.abs(y).max() + 1e-9)
+    # stadyum ambiyansı (sürekli hafif uğultu)
+    amb = band(rng.standard_normal(n), 250, 1800) * (0.6 + 0.4 * np.sin(np.linspace(0, 9, n)) ** 2)
+    out += .07 * amb
+    def whistle(dur):
+        t = np.arange(int(dur * SR)) / SR
+        w = np.sin(2 * np.pi * (2900 + 60 * np.sin(2 * np.pi * 32 * t)) * t)
+        env = np.minimum(1, t / .02) * np.minimum(1, (dur - t) / .05)
+        return w * env
+    add(INTRO / FPS - .1, whistle(.6), .25)                          # başlama düdüğü
+    for i in range(3): add(cues['win'] / FPS + i * .45, whistle(.35 if i < 2 else .8), .25)   # maç sonu
+    tk = np.arange(int(.09 * SR)) / SR
+    kick = np.sin(2 * np.pi * (140 * np.exp(-tk * 25) + 60) * tk) * np.exp(-tk * 45)
+    last = -1
+    for f in cues['bounces']:
+        if f / FPS - last > .1: last = f / FPS; add(last, kick, .45)
+    for f in cues['elims']:                                          # GOL
+        t0 = f / FPS; L = int(4 * SR); t = np.arange(L) / SR
+        roar = band(rng.standard_normal(L), 300, 3500)
+        env = np.minimum(1, t / .35) * np.exp(-np.maximum(0, t - 1.2) * 1.1)
+        add(t0, roar * env, .55)
+        hL = int(1.3 * SR); th = np.arange(hL) / SR; horn = np.zeros(hL)
+        for fq in (220, 277.2, 329.6):
+            ph = 2 * np.pi * fq * th + .4 * np.sin(2 * np.pi * 5 * th)
+            horn += 2 * (ph / (2 * np.pi) % 1) - 1                      # testere dalga
+        horn = band(horn, 80, 2500) * np.minimum(1, th / .05) * np.minimum(1, (1.3 - th) / .15)
+        add(t0 + .05, horn, .22)
+    out /= np.abs(out).max() / .85                                   # kırpma yok, temiz normalize
+    with wave.open(str(path), 'wb') as wv:
+        wv.setnchannels(2); wv.setsampwidth(2); wv.setframerate(SR)
+        wv.writeframes((np.stack([out, out], 1) * 32767).astype('<i2').tobytes())
 
 def match_metadata(home, away, sim):
     a, b = NAMES[home], NAMES[away]; sc = sim['score']
@@ -604,8 +654,8 @@ def main():
         sim = pick_match(seed, home, away)
         print('maç:', home, away, sim['score'])
         raw, wav, final = out / 'raw.mp4', out / 'audio.wav', out / f'lbs_{seed}.mp4'
-        cues = render_match(home, away, sim, raw, seed); cues['cheer'] = cues['elims']
-        make_audio(cues, wav, seed)
+        cues = render_match(home, away, sim, raw, seed)
+        make_match_audio(cues, wav, seed)
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', str(raw), '-i', str(wav), '-c:v', 'copy', '-c:a', 'aac',
                         '-b:a', '192k', '-shortest', '-movflags', '+faststart', str(final)], check=True)
         raw.unlink(); wav.unlink()
