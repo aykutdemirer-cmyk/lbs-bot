@@ -582,12 +582,13 @@ def make_match_audio(cues, path, seed):
         wv.setnchannels(2); wv.setsampwidth(2); wv.setframerate(SR)
         wv.writeframes((np.stack([out, out], 1) * 32767).astype('<i2').tobytes())
 
-def match_metadata(home, away, sim):
+def match_metadata(home, away, sim, real=True):
     a, b = NAMES[home], NAMES[away]; sc = sim['score']
     title = random.choice([f'{a} vs {b} ⚽ Country Ball Match Day', f'{a} vs {b} — Who Wins? ⚽ #shorts', f'Match Day: {a} vs {b} ⚽'])
     if '#shorts' not in title: title += ' #shorts'
-    desc = (f"⚽ MATCH DAY: {a} vs {b}! Country balls play football in a physics simulation.\n"
-            f"The real match is today — who do you think wins? Comment your prediction! 👇\n"
+    hook = ("The real match is today — who do you think wins? Comment your prediction! 👇\n" if real else
+            "Friendly match! Which country would win in real life? Comment your pick! 👇\n")
+    desc = (f"⚽ MATCH DAY: {a} vs {b}! Country balls play football in a physics simulation.\n" + hook +
             f"🔔 Subscribe for a new battle every day.\n\n"
             "This is an animated simulation for fun, not a real match result.\n\n"
             f"#{a.replace(' ', '')} #{b.replace(' ', '')} #football #countryballs #matchday #simulation #shorts")
@@ -649,6 +650,11 @@ def main():
         for line in fx.read_text().splitlines():
             p_ = line.split('#')[0].split()
             if len(p_) == 3 and p_[0] == today: match = f'{p_[1]}-{p_[2]}'
+    real = bool(match)
+    rot = MODE_ORDER[:3] + ['match'] + MODE_ORDER[3:] + ['match']   # maçlar diğer modlarla karışık döner
+    pick = rot[(datetime.date.today().toordinal() + a.index) % len(rot)]
+    if not match and not a.mode and pick == 'match':
+        home_, away_ = random.Random(seed).sample(THEMES['football'][1], 2); match = f'{home_}-{away_}'
     if match:
         home, away = match.lower().split('-')
         sim = pick_match(seed, home, away)
@@ -659,12 +665,12 @@ def main():
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', str(raw), '-i', str(wav), '-c:v', 'copy', '-c:a', 'aac',
                         '-b:a', '192k', '-shortest', '-movflags', '+faststart', str(final)], check=True)
         raw.unlink(); wav.unlink()
-        meta = match_metadata(home, away, sim)
+        meta = match_metadata(home, away, sim, real)
         (out / f'lbs_{seed}.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2))
         print(json.dumps(meta, ensure_ascii=False, indent=2))
         if a.send: send_telegram(final, meta, dict(mode='match', seed=seed))
         return
-    mode = a.mode or MODE_ORDER[(datetime.date.today().toordinal() + a.index) % len(MODE_ORDER)]  # her gün farklı mod
+    mode = a.mode or pick  # her gün farklı mod
     ep, sim = pick_episode(seed, mode)
     print('bölüm:', ep['mode'], ep['theme'], len(ep['codes']), 'ülke, süre', round(sim['fin'] / FPS, 1), 'sn')
     raw, wav, final = out / 'raw.mp4', out / 'audio.wav', out / f'lbs_{seed}.mp4'
