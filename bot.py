@@ -142,27 +142,39 @@ def handle_text(text):
         return send('Bu mod için 4–18 ülke yazmalısın (Dev Arena\'da 40\'a kadar).')
     make(mode, codes or None)
 
-def main():
-    upd = api('getUpdates', timeout=0).get('result', [])
-    if not upd: print('yeni mesaj yok'); return
-    last = upd[-1]['update_id']
-    api('getUpdates', offset=last + 1, timeout=0)        # mesajları "okundu" say (tekrar işlenmesin)
-    for u in upd:
-        try:
-            if 'callback_query' in u:
-                q = u['callback_query']
-                if str(q['message']['chat']['id']) != CHAT: continue
-                api('answerCallbackQuery', callback_query_id=q['id'])
-                kind, m = q['data'].split(':', 1)
-                if kind == 'm':
-                    if m in ('mega', 'random'): make(m)
-                    else: mode_help(m)
-                elif kind == 'g': make(m)
-            elif 'message' in u and 'text' in u['message']:
-                if str(u['message']['chat']['id']) != CHAT: continue
-                handle_text(u['message']['text'])
-        except Exception as e:
-            print('hata:', repr(e)); send(f'⚠️ Bir sorun oldu: {e}')
+def handle(u):
+    try:
+        if 'callback_query' in u:
+            q = u['callback_query']
+            if str(q['message']['chat']['id']) != CHAT: return
+            api('answerCallbackQuery', callback_query_id=q['id'], text='Tamam 👍')
+            kind, m = q['data'].split(':', 1)
+            if kind == 'm':
+                if m in ('mega', 'random'): make(m)
+                else: mode_help(m)
+            elif kind == 'g': make(m)
+        elif 'message' in u and 'text' in u['message']:
+            if str(u['message']['chat']['id']) != CHAT: return
+            handle_text(u['message']['text'])
+    except Exception as e:
+        print('hata:', repr(e)); send(f'⚠️ Bir sorun oldu: {e}')
+
+def main(listen_seconds=int(os.environ.get('LISTEN_SECONDS', '0'))):
+    """Mesajları işler. LISTEN_SECONDS > 0 ise o süre boyunca canlı dinler (anında cevap)."""
+    import time
+    end = time.time() + listen_seconds; offset = None
+    while True:
+        left = end - time.time()
+        params = dict(timeout=max(0, min(25, int(left))) if listen_seconds else 0)
+        if offset: params['offset'] = offset
+        upd = api('getUpdates', **params).get('result', [])
+        for u in upd:
+            offset = u['update_id'] + 1
+            api('getUpdates', offset=offset, timeout=0)   # okundu say (tekrar işlenmesin)
+            handle(u)
+        if not listen_seconds or time.time() >= end - 2:
+            break
+    if not listen_seconds and not offset: print('yeni mesaj yok')
 
 if __name__ == '__main__':
     main()
