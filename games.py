@@ -335,6 +335,9 @@ def render_penalties(home, away, sim, out_path, seed):
 # ======================================================================= ortak giriş noktası
 def make_extra(style, seed, out_dir, codes=None, pair=None):
     """style: race | sumo | penalty. (video_yolu, meta, ep) döndürür."""
+    if style in ('race', 'elim'):  # uzun engebeli misket pistleri (marble.py)
+        import marble
+        return marble.make(style, seed, out_dir, codes)
     rng = random.Random(seed); out_dir.mkdir(exist_ok=True)
     raw, wav, final = out_dir / 'raw.mp4', out_dir / 'audio.wav', out_dir / f'lbs_{seed}.mp4'
     tags = 'country balls,countryballs,marble race,simulation,satisfying,which country wins,last ball standing'

@@ -675,7 +675,7 @@ def main():
             p_ = line.split('#')[0].split()
             if len(p_) == 3 and p_[0] == today: match = f'{p_[1]}-{p_[2]}'
     real = bool(match)
-    rot = (MODE_ORDER[:3] + ['match', 'race'] + MODE_ORDER[3:] + ['match', 'mega', 'sumo', 'penalty'])   # tüm stiller karışık döner
+    rot = (MODE_ORDER[:3] + ['match', 'race'] + MODE_ORDER[3:] + ['match', 'mega', 'elim', 'race'])   # tüm stiller karışık döner
     pick = rot[(datetime.date.today().toordinal() + a.index) % len(rot)]
     if not match and not a.mode and pick == 'match':
         home_, away_ = random.Random(seed).sample(THEMES['football'][1], 2); match = f'{home_}-{away_}'
@@ -696,7 +696,7 @@ def main():
         print(json.dumps(meta, ensure_ascii=False, indent=2))
         if a.send: send_telegram(final, meta, dict(mode='match', seed=seed))
         return
-    if not a.mode and pick in ('race', 'sumo', 'penalty'):   # ekstra oyun stilleri (games.py)
+    if not a.mode and pick in ('race', 'elim', 'sumo', 'penalty'):   # ekstra oyun stilleri (games.py)
         import games
         final, meta, ep = games.make_extra(pick, seed, out)
         (out / f'lbs_{seed}.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2))
