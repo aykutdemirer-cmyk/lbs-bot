@@ -75,15 +75,18 @@ def ensure_name(c):
 # ---- menü ----
 MENU = [('⚽ Maç', 'match'), ('🏆 Son Kalan Kazanır', 'classic'), ('🏃 İlk Kaçan Kazanır', 'escape'),
         ('⚔️ Battle Royale', 'hp'), ('🔻 Daralan Arena', 'shrink'), ('🎈 Büyüyen Toplar', 'grow'),
-        ('🚪 İki Çıkış', 'double'), ('🌍 Dev Arena (40 ülke)', 'mega'), ('🎲 Sürpriz', 'random')]
+        ('🚪 İki Çıkış', 'double'), ('🌍 Dev Arena (40 ülke)', 'mega'), ('🏁 Misket Yarışı', 'race'),
+        ('🤼 Sumo Turnuvası (8 ülke)', 'sumo'), ('🥅 Penaltı Atışları', 'penalty'), ('🎲 Sürpriz', 'random')]
 KEYWORDS = {'mac': 'match', 'match': 'match', 'klasik': 'classic', 'son kalan': 'classic', 'classic': 'classic',
             'kacis': 'escape', 'ilk kacan': 'escape', 'escape': 'escape', 'battle': 'hp', 'battle royale': 'hp',
             'savas': 'hp', 'daralan': 'shrink', 'shrink': 'shrink', 'buyuyen': 'grow', 'grow': 'grow',
             'iki cikis': 'double', 'double': 'double', 'dev': 'mega', 'dev arena': 'mega', 'mega': 'mega',
-            'surpriz': 'random', 'rastgele': 'random', 'random': 'random'}
+            'surpriz': 'random', 'rastgele': 'random', 'random': 'random', 'misket': 'race', 'yaris': 'race',
+            'misket yarisi': 'race', 'race': 'race', 'sumo': 'sumo', 'penalti': 'penalty', 'penalty': 'penalty'}
 HELP = {'match': '⚽ Hangi maç? İki takımı yaz.\nÖrnek:  maç Türkiye İspanya',
         'mega': '🌍 Dev Arena: 40 ülkenin hepsi. Başlatmak için yaz:  dev arena',
-        'random': '🎲 Sürpriz video için yaz:  sürpriz'}
+        'random': '🎲 Sürpriz video için yaz:  sürpriz',
+        'penalty': '🥅 Hangi takımlar? İki takım yaz.\nÖrnek:  penaltı Türkiye İtalya'}
 NAMES_TR = dict((v, k) for k, v in MENU)
 
 def menu():
@@ -93,15 +96,22 @@ def menu():
 
 def mode_help(m):
     if m in HELP: return send(HELP[m])
-    word = {'classic': 'klasik', 'escape': 'kaçış', 'hp': 'battle', 'shrink': 'daralan', 'grow': 'büyüyen', 'double': 'iki çıkış'}[m]
+    word = {'classic': 'klasik', 'escape': 'kaçış', 'hp': 'battle', 'shrink': 'daralan', 'grow': 'büyüyen', 'double': 'iki çıkış',
+            'race': 'misket', 'sumo': 'sumo'}[m]
+    rng_txt = '8 ülke' if m == 'sumo' else '4–18 ülke'
     kb = {'inline_keyboard': [[{'text': '🎲 Rastgele ülkelerle yap', 'callback_data': 'g:' + m}]]}
-    send(f'{NAMES_TR.get(m, m)} seçildi.\nİstersen ülkeleri yaz (4–18 ülke):\n  {word} Türkiye Almanya Fransa Japonya Brezilya\n'
+    send(f'{NAMES_TR.get(m, m)} seçildi.\nİstersen ülkeleri yaz ({rng_txt}):\n  {word} Türkiye Almanya Fransa Japonya Brezilya\n'
          f'ya da aşağıdaki butona bas.', reply_markup=json.dumps(kb))
 
 def make(mode, codes=None, match=None):
     seed = random.randrange(1, 10 ** 6); out = Path('out'); out.mkdir(exist_ok=True)
     send('⏳ Hazırlıyorum, birkaç dakika sürer...')
     raw, wav, final = out / 'raw.mp4', out / 'audio.wav', out / f'lbs_{seed}.mp4'
+    if mode in ('race', 'sumo', 'penalty'):
+        import games
+        for c in (codes or []) + list(match or []): ensure_name(c)
+        final, meta, ep = games.make_extra(mode, seed, out, codes=codes, pair=match)
+        return lbs.send_telegram(final, meta, ep)
     if match:
         home, away = match
         for c in match: ensure_name(c)
@@ -129,16 +139,19 @@ def handle_text(text):
             mode, rest = KEYWORDS[k], text.strip()[len(k):]; break
     if not mode:
         return send('Anlayamadım 🤔 "menü" yaz, seçenekleri göstereyim.')
-    if mode == 'match':
+    if mode in ('match', 'penalty'):
         codes, bad = parse_countries(rest)
+        if mode == 'penalty' and not codes: return make('penalty')
         if len(codes) != 2:
-            return send('Maç için 2 takım yazmalısın. Örnek:  maç Türkiye İspanya' + (f'\nTanımadığım: {" ".join(bad)}' if bad else ''))
-        return make('match', match=codes)
+            return send('2 takım yazmalısın. Örnek:  maç Türkiye İspanya' + (f'\nTanımadığım: {" ".join(bad)}' if bad else ''))
+        return make(mode, match=codes)
     if mode in ('mega', 'random') and not rest.strip():
         return make(mode)
     codes, bad = parse_countries(rest)
     if bad: send(f'Şunları tanıyamadım, onlarsız devam ediyorum: {", ".join(bad)}')
-    if codes and not (4 <= len(codes) <= (40 if mode == 'mega' else 18)):
+    if codes and mode == 'sumo' and len(codes) > 8:
+        return send('Sumo turnuvası en fazla 8 ülke ile yapılır (eksik kalanları ben tamamlarım).')
+    if codes and mode != 'sumo' and not (4 <= len(codes) <= (40 if mode == 'mega' else 18)):
         return send('Bu mod için 4–18 ülke yazmalısın (Dev Arena\'da 40\'a kadar).')
     make(mode, codes or None)
 
