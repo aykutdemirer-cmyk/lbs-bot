@@ -21,19 +21,18 @@ def build_track(rng, n_sections):
     pool = ['zig', 'zig', 'pegs', 'bump', 'spin', 'funnel', 'zig']
     last = None
     for k in range(n_sections):
-        c = rng.choice([p for p in pool if p != last] if k else ['zig']); kinds.append(c); last = c
+        c = rng.choice([p for p in pool if p != last]) if k else 'pegs'; kinds.append(c); last = c  # adil başlangıç: herkes aynı çizgiden çivi tarlasına düşer
         top = y
         if c == 'zig':  # engebeli zikzak rampalar
             side = rng.choice([0, 1])
             for j in range(rng.choice([2, 3])):
                 x0, x1 = (WALL, W - WALL - 150) if side == 0 else (W - WALL, WALL + 150)
-                dy = rng.uniform(250, 310); amp = rng.uniform(8, 15); per = rng.uniform(170, 240); ph = rng.uniform(0, 6)
+                dy = rng.uniform(250, 310); per = rng.uniform(150, 210); ph = rng.uniform(0, 6)
+                amp = .8 * (dy / (W - 2 * WALL - 150)) * per / (2 * math.pi)  # tümsekler var ama çukur yok -> takılma olmaz
                 pts = []
-                for s in np.linspace(0, 1, 40):
+                for s in np.linspace(0, 1, 60):
                     x = x0 + (x1 - x0) * s; yy = y + dy * s - amp * math.sin(s * abs(x1 - x0) / per * 2 * math.pi + ph)
                     pts.append((x, yy))
-                if rng.random() < .5:  # sıçrama tümseği
-                    m = rng.randint(14, 30); pts[m] = (pts[m][0], pts[m][1] - rng.uniform(22, 34))
                 poly(pts, 0); y += dy + rng.uniform(170, 200); side ^= 1
         elif c == 'pegs':
             for row in range(9):
@@ -71,8 +70,7 @@ def simulate(seed, codes, style='race', n_sections=9, max_t=75):
     segs = T['segs']; A = segs[:, :2]; B = segs[:, 2:4]; AB = B - A; L2 = (AB ** 2).sum(1); kind = segs[:, 4]
     pegs = T['pegs']; PR = 12
     bum = np.array([(x, y, r) for x, y, r in T['bumpers']] or [(-999, -999, 1)], float)
-    cols = max(1, min(n, 7)); pos = np.array([[WALL + 70 + (i % cols) * (W - 2 * WALL - 140) / max(1, cols - 1) + rng.uniform(-6, 6),
-                                             460 - (i // cols) * 2.2 * R] for i in range(n)])
+    pos = np.array([[WALL + 45 + i * (W - 2 * WALL - 90) / max(1, n - 1), 490.0] for i in range(n)])  # tek sıra, aynı yükseklik
     vel = np.zeros((n, 2)); alive = np.ones(n, bool); done = np.zeros(n, bool)
     order = []; elims = []; frames = []; hits = []; bounces = []; stuck = np.zeros(n)
     G = 1500.0; dt = 1 / FPS / 5; f = 0; fin = None
@@ -118,7 +116,7 @@ def simulate(seed, codes, style='race', n_sections=9, max_t=75):
                 Db = pos[idx][:, None, :] - bum[None, :, :2]; db = np.sqrt((Db ** 2).sum(2))
                 for a_, s_ in zip(*np.where(db < R + bum[:, 2][None])):
                     i = idx[a_]; nr = Db[a_, s_] / db[a_, s_]; pos[i] = bum[s_, :2] + nr * (R + bum[s_, 2]); vn = vel[i] @ nr
-                    if vn < 50: vel[i] -= vn * nr; vel[i] += nr * 520; ev_hit = True
+                    if vn < 50: vel[i] -= vn * nr; vel[i] += nr * 480 + np.array([-nr[1], nr[0]]) * rng.uniform(-220, 220); ev_hit = True
                 # dönen çubuklar
                 for sx, sy, w, ln in T['spins']:
                     a = t * w; u = np.array([math.cos(a), math.sin(a)])
@@ -136,8 +134,8 @@ def simulate(seed, codes, style='race', n_sections=9, max_t=75):
                     if rv < 0: vel[i] += .9 * rv * nr; vel[j] -= .9 * rv * nr
                 sp = np.hypot(vel[:, 0], vel[:, 1]); big = sp > 1300; vel[big] *= (1300 / sp[big])[:, None]
             # takılma önleyici
-            if open_gate and f % 45 == 0:  # 1.5 sn'de 40px ilerlemeyen misket dürtülür
-                if f > GATE_T * FPS + 45:
+            if open_gate and f % 30 == 0:  # 1 sn'de 40px ilerlemeyen misket dürtülür
+                if f > GATE_T * FPS + 30:
                     for i in np.where(alive & ~done & (pos[:, 1] - stuck < 40))[0]:
                         vel[i] = ((1 if pos[i, 0] < CX else -1) * rng.uniform(180, 300), -rng.uniform(250, 380))
                 stuck = pos[:, 1].copy()
@@ -281,7 +279,7 @@ def make(style, seed, out_dir, codes=None):
     lo, hi = (40, 70) if style == 'race' else (35, 70)
     sim = None
     for k in range(40):
-        s = simulate(seed * 100 + k, codes, style, n_sections=rng.choice([12, 13]) if style == 'race' else 13, max_t=hi + 5)
+        s = simulate(seed * 100 + k, codes, style, n_sections=rng.choice([15, 16]) if style == 'race' else 15, max_t=hi + 5)
         if s and lo * FPS <= s['fin'] <= hi * FPS: sim = s; break
         sim = sim or s
     cues = render(sim, raw, seed); lbs.make_audio(cues, wav, seed)
