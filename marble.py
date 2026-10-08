@@ -6,7 +6,7 @@ import lbs
 from lbs import W, H, FPS, CX, NAMES, font, circ_flag, ball_img, eyes, text_c, fit_font
 from games import _ffmpeg, _confetti, _winner_screen
 
-R = 26; WALL = 40; GATE_T = 3.0
+R = 26; WALL = 40; GATE_T = 3.0; FUN_TOP, FUN_Y, FUN_HW = 380, 720, 58
 
 
 # ----------------------------------------------------------------------- pist üretimi
@@ -14,9 +14,11 @@ def build_track(rng, n_sections):
     segs = []; pegs = []; bumpers = []; spins = []; marks = []
     def poly(pts, kind=0):
         for a, b in zip(pts[:-1], pts[1:]): segs.append((a[0], a[1], b[0], b[1], kind))
-    y = 560
+    y = 780
     poly([(WALL, 300), (WALL, 99999)]); poly([(W - WALL, 300), (W - WALL, 99999)])
-    gate = len(segs); segs.append((WALL, 520, W - WALL, 520, 2))  # başlangıç kapısı
+    # başlangıç hunisi: herkes aynı delikten çıkar (adil başlangıç)
+    poly([(WALL, FUN_TOP), (CX - FUN_HW, FUN_Y)]); poly([(W - WALL, FUN_TOP), (CX + FUN_HW, FUN_Y)])
+    gate = len(segs); segs.append((CX - FUN_HW - 10, FUN_Y, CX + FUN_HW + 10, FUN_Y, 2))  # başlangıç kapısı
     kinds = []
     pool = ['zig', 'zig', 'pegs', 'bump', 'spin', 'funnel', 'zig']
     last = None
@@ -40,6 +42,9 @@ def build_track(rng, n_sections):
                 for kx in range(12):
                     x = 95 + off + kx * 100
                     if WALL + 80 < x < W - WALL - 80: pegs.append((x, y + 40 + row * 95))
+                if row % 2 == 0:  # duvar kenarından kaçış yok: içe yönlendiren eğik takozlar
+                    yy0 = y + 40 + row * 95
+                    poly([(WALL, yy0 - 30), (WALL + 55, yy0 + 12)]); poly([(W - WALL, yy0 - 30), (W - WALL - 55, yy0 + 12)])
             y += 9 * 95 + 80
         elif c == 'bump':  # pinball tamponları
             for row in range(4):
@@ -70,7 +75,13 @@ def simulate(seed, codes, style='race', n_sections=9, max_t=75):
     segs = T['segs']; A = segs[:, :2]; B = segs[:, 2:4]; AB = B - A; L2 = (AB ** 2).sum(1); kind = segs[:, 4]
     pegs = T['pegs']; PR = 12
     bum = np.array([(x, y, r) for x, y, r in T['bumpers']] or [(-999, -999, 1)], float)
-    pos = np.array([[WALL + 45 + i * (W - 2 * WALL - 90) / max(1, n - 1), 490.0] for i in range(n)])  # tek sıra, aynı yükseklik
+    pos = []; k = 0  # misketler hunide üst üste dizilir
+    while len(pos) < n:
+        yy = FUN_Y - 30 - k * 2.1 * R; hw = FUN_HW + (FUN_Y - yy) / (FUN_Y - FUN_TOP) * (CX - FUN_HW - WALL) - R - 6
+        m = max(1, min(n - len(pos), int(2 * hw // (2.15 * R)) + 1))
+        for j in range(m): pos.append([CX + (j - (m - 1) / 2) * 2.15 * R, yy])
+        k += 1
+    pos = np.array(pos)
     vel = np.zeros((n, 2)); alive = np.ones(n, bool); done = np.zeros(n, bool)
     order = []; elims = []; frames = []; hits = []; bounces = []; stuck = np.zeros(n)
     G = 1500.0; dt = 1 / FPS / 5; f = 0; fin = None
@@ -136,7 +147,7 @@ def simulate(seed, codes, style='race', n_sections=9, max_t=75):
             # takılma önleyici
             if open_gate and f % 30 == 0:  # 1 sn'de 40px ilerlemeyen misket dürtülür
                 if f > GATE_T * FPS + 30:
-                    for i in np.where(alive & ~done & (pos[:, 1] - stuck < 40))[0]:
+                    for i in np.where(alive & ~done & (pos[:, 1] - stuck < 40) & (pos[:, 1] > FUN_Y + 40))[0]:
                         vel[i] = ((1 if pos[i, 0] < CX else -1) * rng.uniform(180, 300), -rng.uniform(250, 380))
                 stuck = pos[:, 1].copy()
             # kontrol noktaları / eleme
@@ -213,12 +224,12 @@ def render(T, out_path, seed):
         live = np.where(alive & ~done)[0]
         if len(live):
             ys = pos[live, 1]; lead, back = ys.max(), ys.min()
-            tgt = back - 1000 if elim else lead - 1150
+            tgt = lead - 1150  # kamera her zaman öndekini takip eder
         else: tgt = T['finish'] - 900
         tgt = min(max(tgt, 0), Hh - H); cam = tgt if f == 0 else cam + (tgt - cam) * .12
         cy = int(cam); im = world.crop((0, cy, W, cy + H)); dr = ImageDraw.Draw(im, 'RGBA')
         if t < GATE_T:  # kapı
-            gy = 520 - cy; dr.rectangle([WALL, gy - 6, W - WALL, gy + 6], fill=(255, 196, 0))
+            gy = FUN_Y - cy; dr.rectangle([CX - FUN_HW - 10, gy - 6, CX + FUN_HW + 10, gy + 6], fill=(255, 196, 0))
         for sx, sy, w, ln in T['spins']:
             if -300 < sy - cy < H + 300:
                 a = t * w; ux, uy = math.cos(a), math.sin(a); y0 = sy - cy
