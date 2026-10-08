@@ -276,15 +276,15 @@ def make(style, seed, out_dir, codes=None):
     rng = random.Random(seed); out_dir.mkdir(exist_ok=True)
     raw, wav, final = out_dir / 'raw.mp4', out_dir / 'audio.wav', out_dir / f'lbs_{seed}.mp4'
     codes = list(codes) if codes else rng.sample(list(NAMES), rng.choice([10, 12, 12, 14]) if style == 'race' else rng.choice([10, 12]))
-    lo, hi = (40, 70) if style == 'race' else (35, 70)
+    lo, hi = (35, 50) if style == 'race' else (32, 50)   # video 1 dk altında
     sim = None
     for k in range(40):
-        s = simulate(seed * 100 + k, codes, style, n_sections=rng.choice([15, 16]) if style == 'race' else 15, max_t=hi + 5)
+        s = simulate(seed * 100 + k, codes, style, n_sections=rng.choice([13, 14]) if style == 'race' else 13, max_t=hi + 5)
         if s and lo * FPS <= s['fin'] <= hi * FPS: sim = s; break
         sim = sim or s
     cues = render(sim, raw, seed); lbs.make_audio(cues, wav, seed)
     subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', str(raw), '-i', str(wav), '-c:v', 'copy', '-c:a', 'aac',
-                    '-b:a', '192k', '-shortest', '-movflags', '+faststart', str(final)], check=True)
+                    '-b:a', '192k', '-shortest', '-t', '59', '-movflags', '+faststart', str(final)], check=True)
     raw.unlink(); wav.unlink()
     C = sim['codes']; win = NAMES[C[sim['order'][0]]]; n = len(C)
     if style == 'race':

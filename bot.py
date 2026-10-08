@@ -76,13 +76,13 @@ def ensure_name(c):
 MENU = [('⚽ Maç', 'match'), ('🏆 Son Kalan Kazanır', 'classic'), ('🏃 İlk Kaçan Kazanır', 'escape'),
         ('⚔️ Battle Royale', 'hp'), ('🔻 Daralan Arena', 'shrink'), ('🎈 Büyüyen Toplar', 'grow'),
         ('🚪 İki Çıkış', 'double'), ('🌍 Dev Arena (40 ülke)', 'mega'), ('🏁 Misket Yarışı', 'race'),
-        ('🔥 Eleme Yarışı', 'elim'), ('🎲 Sürpriz', 'random')]
+        ('🔥 Eleme Yarışı', 'elim'), ('🗺️ Ülke Fethi', 'map'), ('🎲 Sürpriz', 'random')]
 KEYWORDS = {'mac': 'match', 'match': 'match', 'klasik': 'classic', 'son kalan': 'classic', 'classic': 'classic',
             'kacis': 'escape', 'ilk kacan': 'escape', 'escape': 'escape', 'battle': 'hp', 'battle royale': 'hp',
             'savas': 'hp', 'daralan': 'shrink', 'shrink': 'shrink', 'buyuyen': 'grow', 'grow': 'grow',
             'iki cikis': 'double', 'double': 'double', 'dev': 'mega', 'dev arena': 'mega', 'mega': 'mega',
             'surpriz': 'random', 'rastgele': 'random', 'random': 'random', 'misket': 'race', 'yaris': 'race',
-            'misket yarisi': 'race', 'race': 'race', 'eleme': 'elim', 'eleme yarisi': 'elim', 'elim': 'elim', 'sumo': 'sumo', 'penalti': 'penalty', 'penalty': 'penalty'}
+            'misket yarisi': 'race', 'race': 'race', 'eleme': 'elim', 'eleme yarisi': 'elim', 'elim': 'elim', 'harita': 'map', 'fetih': 'map', 'ulke fethi': 'map', 'map': 'map', 'sumo': 'sumo', 'penalti': 'penalty', 'penalty': 'penalty'}
 HELP = {'match': '⚽ Hangi maç? İki takımı yaz.\nÖrnek:  maç Türkiye İspanya',
         'mega': '🌍 Dev Arena: 40 ülkenin hepsi. Başlatmak için yaz:  dev arena',
         'random': '🎲 Sürpriz video için yaz:  sürpriz',
@@ -97,7 +97,7 @@ def menu():
 def mode_help(m):
     if m in HELP: return send(HELP[m])
     word = {'classic': 'klasik', 'escape': 'kaçış', 'hp': 'battle', 'shrink': 'daralan', 'grow': 'büyüyen', 'double': 'iki çıkış',
-            'race': 'misket', 'elim': 'eleme', 'sumo': 'sumo'}[m]
+            'race': 'misket', 'elim': 'eleme', 'map': 'harita', 'sumo': 'sumo'}[m]
     rng_txt = '8 ülke' if m == 'sumo' else '4–18 ülke'
     kb = {'inline_keyboard': [[{'text': '🎲 Rastgele ülkelerle yap', 'callback_data': 'g:' + m}]]}
     send(f'{NAMES_TR.get(m, m)} seçildi.\nİstersen ülkeleri yaz ({rng_txt}):\n  {word} Türkiye Almanya Fransa Japonya Brezilya\n'
@@ -107,7 +107,7 @@ def make(mode, codes=None, match=None):
     seed = random.randrange(1, 10 ** 6); out = Path('out'); out.mkdir(exist_ok=True)
     send('⏳ Hazırlıyorum, birkaç dakika sürer...')
     raw, wav, final = out / 'raw.mp4', out / 'audio.wav', out / f'lbs_{seed}.mp4'
-    if mode in ('race', 'elim', 'sumo', 'penalty'):
+    if mode in ('race', 'elim', 'map', 'sumo', 'penalty'):
         import games
         for c in (codes or []) + list(match or []): ensure_name(c)
         final, meta, ep = games.make_extra(mode, seed, out, codes=codes, pair=match)

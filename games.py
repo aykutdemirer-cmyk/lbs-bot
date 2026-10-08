@@ -335,6 +335,9 @@ def render_penalties(home, away, sim, out_path, seed):
 # ======================================================================= ortak giriş noktası
 def make_extra(style, seed, out_dir, codes=None, pair=None):
     """style: race | sumo | penalty. (video_yolu, meta, ep) döndürür."""
+    if style == 'map':  # ülke fethi (conquest.py)
+        import conquest
+        return conquest.make(seed, out_dir, codes)
     if style in ('race', 'elim'):  # uzun engebeli misket pistleri (marble.py)
         import marble
         return marble.make(style, seed, out_dir, codes)
